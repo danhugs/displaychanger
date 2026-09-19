@@ -12,7 +12,7 @@
     <ApplicationIcon>Assets\tray.ico</ApplicationIcon>
     <AssemblyName>DisplayChanger</AssemblyName>
     <RootNamespace>DisplayChanger</RootNamespace>
-    <Version>1.0.0</Version>
+    <Version>1.1.0</Version>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
   </PropertyGroup>

@@ -1,6 +1,7 @@
 using System.Reflection;
 using DisplayChanger.Audio;
 using DisplayChanger.Displays;
+using DisplayChanger.Windowing;
 using static DisplayChanger.Native.NativeMethods;
 
 namespace DisplayChanger;
@@ -12,9 +13,11 @@ public sealed class TrayAppContext : ApplicationContext
     private const string DisplayHotkeyLabel = "Win+/";
     private const string OutputHotkeyLabel = "Win+]";
     private const string InputHotkeyLabel = "Win+'";
+    private const string GatherHotkeyLabel = "Win+[";
 
     private readonly DisplayService _displays = new();
     private readonly AudioService _audio = new();
+    private readonly WindowGatherer _windows = new();
     private readonly Settings _settings;
     private readonly NotifyIcon _icon;
     private readonly ContextMenuStrip _menu;
@@ -33,7 +36,7 @@ public sealed class TrayAppContext : ApplicationContext
         _icon = new NotifyIcon
         {
             Icon = _trayIcon,
-            Text = $"{AppName}  {DisplayHotkeyLabel} display, {OutputHotkeyLabel} output, {InputHotkeyLabel} input",
+            Text = $"{AppName}  {DisplayHotkeyLabel} display, {OutputHotkeyLabel} output, {InputHotkeyLabel} input, {GatherHotkeyLabel} gather windows",
             ContextMenuStrip = _menu,
             Visible = true,
         };
@@ -43,6 +46,7 @@ public sealed class TrayAppContext : ApplicationContext
         _hotkeys.Register(MOD_WIN, VK_OEM_2, DisplayHotkeyLabel, CycleDisplay);
         _hotkeys.Register(MOD_WIN, VK_OEM_6, OutputHotkeyLabel, () => CycleAudio(AudioFlow.Output));
         _hotkeys.Register(MOD_WIN, VK_OEM_7, InputHotkeyLabel, () => CycleAudio(AudioFlow.Input));
+        _hotkeys.Register(MOD_WIN, VK_OEM_4, GatherHotkeyLabel, GatherWindows);
 
         RebuildMenu();
         HandleFirstRun();
@@ -68,6 +72,7 @@ public sealed class TrayAppContext : ApplicationContext
         _menu.Items.Add(MakeAction("Next display", DisplayHotkeyLabel, canCycleDisplay, CycleDisplay));
         _menu.Items.Add(MakeAction("Next output", OutputHotkeyLabel, canCycleOutput, () => CycleAudio(AudioFlow.Output)));
         _menu.Items.Add(MakeAction("Next input", InputHotkeyLabel, canCycleInput, () => CycleAudio(AudioFlow.Input)));
+        _menu.Items.Add(MakeAction("Gather windows to active display", GatherHotkeyLabel, true, GatherWindows));
         _menu.Items.Add(new ToolStripSeparator());
 
         var startup = new ToolStripMenuItem("Start with Windows") { Checked = StartupRegistration.IsEnabled() };
@@ -247,12 +252,37 @@ public sealed class TrayAppContext : ApplicationContext
         }
     }
 
+    private void GatherWindows()
+    {
+        try
+        {
+            var result = _windows.GatherToActiveDisplay();
+            var displays = _displays.Enumerate();
+            var target = displays.FirstOrDefault(d => string.Equals(d.DeviceName, result.TargetDeviceName, StringComparison.OrdinalIgnoreCase));
+
+            string note;
+            if (result.Moved == 0 && result.Failed == 0)
+                note = "All windows are already on this display";
+            else
+            {
+                note = $"Moved {result.Moved} window{(result.Moved == 1 ? "" : "s")} here";
+                if (result.Failed > 0) note += $", {result.Failed} could not be moved";
+            }
+
+            ShowDisplayPane(displays, target, note, heading: "Windows");
+        }
+        catch (Exception ex)
+        {
+            Notify(ex.Message, ToolTipIcon.Warning, force: true);
+        }
+    }
+
     private HashSet<string> ExcludedIds(AudioFlow flow) =>
         flow == AudioFlow.Output ? _settings.ExcludedOutputIds : _settings.ExcludedInputIds;
 
     // ---- On-screen pane ------------------------------------------------------------------------
 
-    private void ShowDisplayPane(IReadOnlyList<DisplayInfo> displays, DisplayInfo? selected, string? note = null)
+    private void ShowDisplayPane(IReadOnlyList<DisplayInfo> displays, DisplayInfo? selected, string? note = null, string heading = "Display")
     {
         if (!_settings.ShowNotifications) return;
 
@@ -262,7 +292,7 @@ public sealed class TrayAppContext : ApplicationContext
             duplicateNames ? $"{d.FriendlyName}  ({DisplayNumber(d)})" : d.FriendlyName,
             selected is not null && string.Equals(d.DeviceName, selected.DeviceName, StringComparison.OrdinalIgnoreCase))).ToList();
 
-        _overlay.Present("Display", entries, note);
+        _overlay.Present(heading, entries, note);
     }
 
     private void ShowAudioPane(AudioFlow flow, IReadOnlyList<AudioDeviceInfo> devices, AudioDeviceInfo? selected, string? note = null)
