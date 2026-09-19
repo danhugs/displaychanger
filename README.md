@@ -18,7 +18,7 @@ communications) so every app follows it.
 - **Include in cycle** sub-list under Output and Input: untick devices you never want the hotkey to land on (virtual cables, monitor speakers, and so on). They can still be chosen from the menu.
 - Double-click the tray icon to cycle the display.
 - Registers itself to start at sign-in on first launch (per-user Run key, no admin). Untick **Start with Windows** to turn that off.
-- Balloon notification on each switch. Untick **Show notifications** to silence it.
+- A small dark pane in the bottom-right corner of the primary display lists the devices in the current category (Display, Output or Input) with the active one highlighted, then fades out. Pressing a hotkey repeatedly updates the same pane instead of queueing Windows notifications; switching to another category replaces the pane's contents. Untick **Show on-screen pane** to turn it off. Errors still use a tray balloon.
 - Single instance: launching it again while it is running does nothing.
 - Re-enumerates devices on every press and every menu open, so plugging things in or out just works.
 
@@ -56,7 +56,7 @@ later, launch it once from the new location and the entry is updated automatical
 
 | What | Where |
 |------|-------|
-| Settings (notifications, cycle exclusions) | `%LocalAppData%\DisplayChanger\settings.json` |
+| Settings (on-screen pane, cycle exclusions) | `%LocalAppData%\DisplayChanger\settings.json` |
 | Startup entry | `HKCU\Software\Microsoft\Windows\CurrentVersion\Run\DisplayChanger` |
 
 To remove the startup entry manually:
@@ -87,5 +87,5 @@ interop is hand-written in `Native/CoreAudioInterop.cs`; there are no NuGet depe
   On other layouts the physical key may differ. If Windows or another app already owns one of them the
   app shows a warning balloon and the tray menu still works. To change a key, edit the `Register` calls in
   `TrayAppContext.cs`.
-- With a single display, Win+/ does nothing except show "Only one display is connected".
+- With a single display, Win+/ does nothing except show the pane with an "Only one display is connected" note.
 - Some hybrid-GPU laptops reject position changes for the internal panel; the error is surfaced as a balloon and nothing is half-applied.

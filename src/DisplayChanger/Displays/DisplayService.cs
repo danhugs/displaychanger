@@ -76,10 +76,11 @@ public sealed class DisplayService
     /// <summary>
     /// Moves the primary to the next display in left-to-right order, wrapping around.
     /// Returns the new primary, or null if there is only one display (nothing changed).
+    /// <paramref name="displays"/> receives the displays in cycle order as they were before the change.
     /// </summary>
-    public DisplayInfo? CycleNext()
+    public DisplayInfo? CycleNext(out IReadOnlyList<DisplayInfo> displays)
     {
-        var displays = Enumerate();
+        displays = Enumerate();
         if (displays.Count < 2) return null;
 
         int idx = displays.ToList().FindIndex(d => d.IsPrimary);

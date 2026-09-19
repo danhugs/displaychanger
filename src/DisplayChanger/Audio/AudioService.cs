@@ -63,15 +63,18 @@ public sealed class AudioService
     /// <summary>
     /// Moves the default to the next device (alphabetical order, wrapping), skipping any whose ID is in <paramref name="excludedIds"/>.
     /// Returns the new default, or null if nothing changed (no candidates, or only the current default is eligible).
+    /// <paramref name="candidates"/> receives the devices that were eligible for cycling, in cycle order, as they were
+    /// before the change (so their <see cref="AudioDeviceInfo.IsDefault"/> flags describe the previous default).
     /// </summary>
-    public AudioDeviceInfo? CycleNext(AudioFlow flow, ISet<string> excludedIds)
+    public AudioDeviceInfo? CycleNext(AudioFlow flow, ISet<string> excludedIds, out IReadOnlyList<AudioDeviceInfo> candidates)
     {
         var all = Enumerate(flow);
-        var candidates = all.Where(d => !excludedIds.Contains(d.Id)).ToList();
-        if (candidates.Count == 0) return null;
+        var eligible = all.Where(d => !excludedIds.Contains(d.Id)).ToList();
+        candidates = eligible;
+        if (eligible.Count == 0) return null;
 
-        int idx = candidates.FindIndex(d => d.IsDefault);
-        var next = candidates[(idx + 1) % candidates.Count];
+        int idx = eligible.FindIndex(d => d.IsDefault);
+        var next = eligible[(idx + 1) % eligible.Count];
         if (next.IsDefault) return null;
 
         SetDefault(next);

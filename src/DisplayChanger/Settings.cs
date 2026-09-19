@@ -20,7 +20,10 @@ public sealed class Settings
     /// <summary>Set after the first launch has auto-registered the app to start with Windows.</summary>
     public bool FirstRunDone { get; set; }
 
-    /// <summary>Show a tray balloon when the primary display or default audio device changes.</summary>
+    /// <summary>
+    /// Show the on-screen pane (bottom-right of the primary display) when the primary display or default
+    /// audio device changes. Kept under its original JSON name for compatibility with existing settings files.
+    /// </summary>
     public bool ShowNotifications { get; set; } = true;
 
     /// <summary>Playback endpoint IDs skipped by Win+] cycling. They can still be picked directly from the menu.</summary>

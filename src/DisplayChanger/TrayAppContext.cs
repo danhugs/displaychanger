@@ -19,6 +19,7 @@ public sealed class TrayAppContext : ApplicationContext
     private readonly NotifyIcon _icon;
     private readonly ContextMenuStrip _menu;
     private readonly HotkeyWindow _hotkeys;
+    private readonly OverlayWindow _overlay = new();
     private readonly Icon _trayIcon;
 
     public TrayAppContext()
@@ -73,7 +74,7 @@ public sealed class TrayAppContext : ApplicationContext
         startup.Click += (_, _) => ToggleStartup();
         _menu.Items.Add(startup);
 
-        var notify = new ToolStripMenuItem("Show notifications") { Checked = _settings.ShowNotifications };
+        var notify = new ToolStripMenuItem("Show on-screen pane") { Checked = _settings.ShowNotifications };
         notify.Click += (_, _) => ToggleNotifications();
         _menu.Items.Add(notify);
 
@@ -187,13 +188,9 @@ public sealed class TrayAppContext : ApplicationContext
     {
         try
         {
-            var next = _displays.CycleNext();
-            if (next is null)
-            {
-                Notify("Only one display is connected.", ToolTipIcon.Info);
-                return;
-            }
-            Notify($"Display: {next.FriendlyName}", ToolTipIcon.Info);
+            var next = _displays.CycleNext(out var displays);
+            var selected = next ?? displays.FirstOrDefault(d => d.IsPrimary);
+            ShowDisplayPane(displays, selected, next is null ? "Only one display is connected" : null);
         }
         catch (Exception ex)
         {
@@ -206,7 +203,7 @@ public sealed class TrayAppContext : ApplicationContext
         try
         {
             _displays.SetPrimary(target);
-            Notify($"Display: {target.FriendlyName}", ToolTipIcon.Info);
+            ShowDisplayPane(_displays.Enumerate(), target);
         }
         catch (Exception ex)
         {
@@ -216,17 +213,15 @@ public sealed class TrayAppContext : ApplicationContext
 
     private void CycleAudio(AudioFlow flow)
     {
-        var label = flow == AudioFlow.Output ? "Output" : "Input";
-        var excluded = flow == AudioFlow.Output ? _settings.ExcludedOutputIds : _settings.ExcludedInputIds;
+        var excluded = ExcludedIds(flow);
         try
         {
-            var next = _audio.CycleNext(flow, excluded);
+            var next = _audio.CycleNext(flow, excluded, out var candidates);
+            var selected = next ?? candidates.FirstOrDefault(d => d.IsDefault);
+            string? note = null;
             if (next is null)
-            {
-                Notify($"No other {label.ToLowerInvariant()} device is included in the cycle.", ToolTipIcon.Info);
-                return;
-            }
-            Notify($"{label}: {next.Name}", ToolTipIcon.Info);
+                note = candidates.Count == 0 ? "No device is included in the cycle" : "No other device is included in the cycle";
+            ShowAudioPane(flow, candidates, selected, note);
         }
         catch (Exception ex)
         {
@@ -236,16 +231,56 @@ public sealed class TrayAppContext : ApplicationContext
 
     private void SetDefaultAudio(AudioDeviceInfo device)
     {
-        var label = device.Flow == AudioFlow.Output ? "Output" : "Input";
+        var excluded = ExcludedIds(device.Flow);
         try
         {
             _audio.SetDefault(device);
-            Notify($"{label}: {device.Name}", ToolTipIcon.Info);
+            // List the cycle set, plus the chosen device if it happens to be excluded from cycling.
+            var listed = _audio.Enumerate(device.Flow)
+                .Where(d => !excluded.Contains(d.Id) || string.Equals(d.Id, device.Id, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            ShowAudioPane(device.Flow, listed, device);
         }
         catch (Exception ex)
         {
             Notify(ex.Message, ToolTipIcon.Warning, force: true);
         }
+    }
+
+    private HashSet<string> ExcludedIds(AudioFlow flow) =>
+        flow == AudioFlow.Output ? _settings.ExcludedOutputIds : _settings.ExcludedInputIds;
+
+    // ---- On-screen pane ------------------------------------------------------------------------
+
+    private void ShowDisplayPane(IReadOnlyList<DisplayInfo> displays, DisplayInfo? selected, string? note = null)
+    {
+        if (!_settings.ShowNotifications) return;
+
+        // Two identical monitors share a friendly name; add the GDI number so the rows stay distinguishable.
+        bool duplicateNames = displays.Select(d => d.FriendlyName).Distinct(StringComparer.OrdinalIgnoreCase).Count() != displays.Count;
+        var entries = displays.Select(d => new OverlayWindow.Entry(
+            duplicateNames ? $"{d.FriendlyName}  ({DisplayNumber(d)})" : d.FriendlyName,
+            selected is not null && string.Equals(d.DeviceName, selected.DeviceName, StringComparison.OrdinalIgnoreCase))).ToList();
+
+        _overlay.Present("Display", entries, note);
+    }
+
+    private void ShowAudioPane(AudioFlow flow, IReadOnlyList<AudioDeviceInfo> devices, AudioDeviceInfo? selected, string? note = null)
+    {
+        if (!_settings.ShowNotifications) return;
+
+        var entries = devices.Select(d => new OverlayWindow.Entry(
+            d.Name,
+            selected is not null && string.Equals(d.Id, selected.Id, StringComparison.OrdinalIgnoreCase))).ToList();
+
+        _overlay.Present(flow == AudioFlow.Output ? "Output" : "Input", entries, note);
+    }
+
+    private static string DisplayNumber(DisplayInfo d)
+    {
+        // \\.\DISPLAY3 -> "Display 3"
+        var digits = new string(d.DeviceName.Where(char.IsDigit).ToArray());
+        return digits.Length > 0 ? $"Display {digits}" : d.DeviceName;
     }
 
     private void ToggleStartup()
@@ -264,6 +299,7 @@ public sealed class TrayAppContext : ApplicationContext
     private void ToggleNotifications()
     {
         _settings.ShowNotifications = !_settings.ShowNotifications;
+        if (!_settings.ShowNotifications) _overlay.Dismiss();
         SaveSettings();
     }
 
@@ -272,6 +308,7 @@ public sealed class TrayAppContext : ApplicationContext
         _icon.Visible = false;
         _icon.Dispose();
         _hotkeys.Dispose();
+        _overlay.Dispose();
         _menu.Dispose();
         _trayIcon.Dispose();
         ExitThread();
@@ -320,6 +357,7 @@ public sealed class TrayAppContext : ApplicationContext
         catch (Exception ex) { Notify($"Could not save settings: {ex.Message}", ToolTipIcon.Warning, force: true); }
     }
 
+    /// <summary>Tray balloon, now used only for warnings and errors; routine switches go through the on-screen pane.</summary>
     private void Notify(string text, ToolTipIcon kind, bool force = false)
     {
         if (!force && !_settings.ShowNotifications) return;
@@ -355,6 +393,7 @@ public sealed class TrayAppContext : ApplicationContext
         {
             _icon.Dispose();
             _hotkeys.Dispose();
+            _overlay.Dispose();
             _menu.Dispose();
         }
         base.Dispose(disposing);
