@@ -22,10 +22,23 @@ communications) so every app follows it.
 - Single instance: launching it again while it is running does nothing.
 - Re-enumerates devices on every press and every menu open, so plugging things in or out just works.
 
+## Download
+
+Prebuilt exes are on the [Releases page](https://github.com/danhugs/displaychanger/releases/latest). Two flavours:
+
+| File | Needs .NET installed? | Size |
+|------|-----------------------|------|
+| `DisplayChanger-<version>-win-x64.exe` | No (self-contained) | ~110 MB |
+| `DisplayChanger-<version>-win-x64-framework-dependent.exe` | Yes, .NET 9 Desktop Runtime | ~0.2 MB |
+
+Put the exe somewhere permanent (for example `%LocalAppData%\DisplayChanger\`) and run it. It registers itself
+to start at sign-in. Windows SmartScreen may warn on first run because the exe is unsigned; choose
+**More info > Run anyway**.
+
 ## Requirements
 
 - Windows 10 or 11.
-- .NET 9 Desktop Runtime (already present if you have the .NET 9 SDK). Or publish self-contained, see below.
+- .NET 9 Desktop Runtime for the framework-dependent build (already present if you have the .NET 9 SDK). The self-contained build has no requirements.
 
 ## Build and run
 
